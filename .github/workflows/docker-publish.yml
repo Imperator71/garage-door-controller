@@ -11,6 +11,9 @@ jobs:
   build-and-push:
     runs-on: ubuntu-latest
 
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
     permissions:
       contents: read
       packages: write
@@ -19,11 +22,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Lowercase owner
+        run: echo "OWNER=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
-          username: ${{ github.actor }}
+          username: ${{ env.OWNER }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push image
@@ -32,5 +38,5 @@ jobs:
           context: ./_Docker-Database
           push: true
           tags: |
-            ghcr.io/${{ github.repository_owner }}/garage-fingerprint-registry:latest
-            ghcr.io/${{ github.repository_owner }}/garage-fingerprint-registry:${{ github.sha }}
+            ghcr.io/${{ env.OWNER }}/garage-fingerprint-registry:latest
+            ghcr.io/${{ env.OWNER }}/garage-fingerprint-registry:${{ github.sha }}
