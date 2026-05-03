@@ -1,16 +1,11 @@
 # TrueNAS SCALE — Custom App compose file.
-# Replace YOUR_GITHUB_USERNAME with your actual GitHub username (lowercase).
-# To pull from ghcr.io on TrueNAS:
-#   Apps → Discover → Custom App → paste this YAML
-#   Add registry credential: ghcr.io / your GitHub username / your PAT (read:packages)
+# Image is public — no registry credentials needed.
 #
-# To update to a new version:
-#   - Use tag :latest  →  re-deploy the app in TrueNAS UI (it will pull fresh)
-#   - Or pin to a specific git SHA tag from the GitHub Actions build log
+# To update to a new version: re-deploy the app in TrueNAS UI (pulls fresh :latest)
 
 services:
   fingerprint-registry:
-    image: ghcr.io/YOUR_GITHUB_USERNAME/garage-fingerprint-registry:latest
+    image: ghcr.io/imperator71/garage-fingerprint-registry:latest
     ports:
       - "30080:8080"
     environment:

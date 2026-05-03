@@ -1,7 +1,7 @@
 #include <Arduino.h>
 #include <ETH.h>
 #include <PubSubClient.h>   // Install: "PubSubClient" by Nick O'Leary
-/
+
 /*
 Garage Door Opening, Door Sensing and Fingerprint Sensor board
 ---

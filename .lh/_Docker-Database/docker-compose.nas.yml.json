@@ -1,0 +1,18 @@
+{
+    "sourceFile": "_Docker-Database/docker-compose.nas.yml",
+    "activeCommit": 0,
+    "commits": [
+        {
+            "activePatchIndex": 0,
+            "patches": [
+                {
+                    "date": 1777821895927,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n"
+                }
+            ],
+            "date": 1777821895927,
+            "name": "Commit-0",
+            "content": "# TrueNAS SCALE — Custom App compose file.\r\n# Image is public — no registry credentials needed.\r\n#\r\n# To update to a new version: re-deploy the app in TrueNAS UI (pulls fresh :latest)\r\n\r\nservices:\r\n  fingerprint-registry:\r\n    image: ghcr.io/imperator71/garage-fingerprint-registry:latest\r\n    ports:\r\n      - \"30080:8080\"\r\n    environment:\r\n      - MQTT_URL=mqtt://192.168.1.1\r\n      - MQTT_USER=\r\n      - MQTT_PASS=\r\n      - PORT=8080\r\n      - DATA_FILE=/data/templates.json\r\n    volumes:\r\n      - ./data:/data\r\n    restart: unless-stopped\r\n"
+        }
+    ]
+}
