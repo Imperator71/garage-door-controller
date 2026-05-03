@@ -1,0 +1,18 @@
+{
+    "sourceFile": ".github/workflows/docker-publish.yml",
+    "activeCommit": 0,
+    "commits": [
+        {
+            "activePatchIndex": 0,
+            "patches": [
+                {
+                    "date": 1777819132986,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n"
+                }
+            ],
+            "date": 1777819132986,
+            "name": "Commit-0",
+            "content": "name: Build & Push Docker Image\r\n\r\non:\r\n  push:\r\n    branches: [main]\r\n    paths:\r\n      - '_Docker-Database/**'\r\n      - '.github/workflows/docker-publish.yml'\r\n\r\njobs:\r\n  build-and-push:\r\n    runs-on: ubuntu-latest\r\n\r\n    env:\r\n      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true\r\n\r\n    permissions:\r\n      contents: read\r\n      packages: write\r\n\r\n    steps:\r\n      - name: Checkout\r\n        uses: actions/checkout@v4\r\n\r\n      - name: Lowercase owner\r\n        run: echo \"OWNER=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')\" >> $GITHUB_ENV\r\n\r\n      - name: Log in to GitHub Container Registry\r\n        uses: docker/login-action@v3\r\n        with:\r\n          registry: ghcr.io\r\n          username: ${{ env.OWNER }}\r\n          password: ${{ secrets.GITHUB_TOKEN }}\r\n\r\n      - name: Build and push image\r\n        uses: docker/build-push-action@v6\r\n        with:\r\n          context: ./_Docker-Database\r\n          push: true\r\n          tags: |\r\n            ghcr.io/${{ env.OWNER }}/garage-fingerprint-registry:latest\r\n            ghcr.io/${{ env.OWNER }}/garage-fingerprint-registry:${{ github.sha }}\r\n"
+        }
+    ]
+}
