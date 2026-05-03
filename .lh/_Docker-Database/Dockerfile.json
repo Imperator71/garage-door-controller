@@ -3,11 +3,15 @@
     "activeCommit": 0,
     "commits": [
         {
-            "activePatchIndex": 0,
+            "activePatchIndex": 1,
             "patches": [
                 {
                     "date": 1777818900643,
                     "content": "Index: \n===================================================================\n--- \n+++ \n"
+                },
+                {
+                    "date": 1777819263414,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n@@ -0,0 +1,12 @@\n+FROM node:18-alpine\r\n+\r\n+WORKDIR /app\r\n+COPY package*.json ./\r\n+RUN npm install --omit=dev\r\n+COPY . .\r\n+\r\n+# Data volume mount point -\r\n+RUN mkdir -p /data\r\n+\r\n+EXPOSE 8080\r\n+CMD [\"node\", \"server.js\"]\r\n"
                 }
             ],
             "date": 1777818900643,
