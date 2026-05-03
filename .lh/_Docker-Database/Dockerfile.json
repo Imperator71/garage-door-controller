@@ -1,0 +1,18 @@
+{
+    "sourceFile": "_Docker-Database/Dockerfile",
+    "activeCommit": 0,
+    "commits": [
+        {
+            "activePatchIndex": 0,
+            "patches": [
+                {
+                    "date": 1777818900643,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n"
+                }
+            ],
+            "date": 1777818900643,
+            "name": "Commit-0",
+            "content": "FROM node:18-alpine\r\n\r\nWORKDIR /app\r\nCOPY package*.json ./\r\nRUN npm ci --only=production\r\nCOPY . .\r\n\r\n# Data volume mount point -\r\nRUN mkdir -p /data\r\n\r\nEXPOSE 8080\r\nCMD [\"node\", \"server.js\"]\r\n"
+        }
+    ]
+}

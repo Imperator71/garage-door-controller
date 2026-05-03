@@ -5,7 +5,7 @@ COPY package*.json ./
 RUN npm ci --only=production
 COPY . .
 
-# Data volume mount point
+# Data volume mount point -
 RUN mkdir -p /data
 
 EXPOSE 8080
