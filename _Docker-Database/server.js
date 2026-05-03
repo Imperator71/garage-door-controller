@@ -159,9 +159,6 @@ app.get('/fingerprint/slots', (req, res) => {
   res.json({ slots: sensorSlots });
 });
 
-// 404 catch-all
-app.use((req, res) => res.status(404).json({ error: 'Not found' }));
-
 // ── UI ────────────────────────────────────────────────────────
 app.get('/', (req, res) => {
   res.send(`<!DOCTYPE html>
@@ -374,5 +371,7 @@ setInterval(refresh, 5000);
 </html>`);
 });
 
+// 404 catch-all (must be after all routes)
+app.use((req, res) => res.status(404).json({ error: 'Not found' }));
 
 app.listen(PORT, () => console.log(`[http] fingerprint registry listening on :${PORT}`));
