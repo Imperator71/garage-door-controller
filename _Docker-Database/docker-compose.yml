@@ -1,0 +1,14 @@
+services:
+  fingerprint-registry:
+    build: .
+    ports:
+      - "30080:8080"
+    environment:
+      - MQTT_URL=mqtt://192.168.1.1        # ← Change to your MQTT broker IP
+      - MQTT_USER=                          # ← Set if your broker requires auth
+      - MQTT_PASS=
+      - PORT=8080
+      - DATA_FILE=/data/templates.json
+    volumes:
+      - ./data:/data                        # Template storage persists here
+    restart: unless-stopped

@@ -1,0 +1,12 @@
+# Local scratch / ignored sketches
+_ignore/
+
+# Waveshare reference examples (cloned locally, not part of this project)
+waveshare-examples/
+_docs/
+# Docker runtime data
+_Docker-Database/data/
+
+# OS noise
+.DS_Store
+Thumbs.db

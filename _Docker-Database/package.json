@@ -1,0 +1,13 @@
+{
+  "name": "fingerprint-registry",
+  "version": "1.0.0",
+  "description": "Garage door fingerprint template registry with MQTT event logging",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "mqtt": "^5.5.0"
+  }
+}
