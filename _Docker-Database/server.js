@@ -12,8 +12,15 @@ const MQTT_USER = process.env.MQTT_USER           || '';
 const MQTT_PASS = process.env.MQTT_PASS           || '';
 const DATA_FILE = process.env.DATA_FILE           || '/data/templates.json';
 
-const MQTT_TOPICS = ['garage/door/state', 'garage/pir', 'garage/radar'];
+const MQTT_TOPICS = ['garage/door/state', 'garage/pir', 'garage/radar', 'garage/fingerprint'];
+const FP_CMD_TOPIC    = 'garage/fingerprint/cmd';
+const FP_RESULT_TOPIC = 'garage/fingerprint/result';
+const FP_SLOTS_TOPIC  = 'garage/fingerprint/slots';
 const MAX_EVENTS  = 500;
+
+// Latest fingerprint result (for polling)
+let lastFpResult = null;   // { value, ts }
+let sensorSlots  = [];     // slot IDs currently on the sensor
 
 // ── Persistence ───────────────────────────────────────────────
 function loadData() {
@@ -41,7 +48,7 @@ const mqttClient = mqtt.connect(MQTT_URL, mqttOpts);
 
 mqttClient.on('connect', () => {
   console.log(`[mqtt] connected → ${MQTT_URL}`);
-  mqttClient.subscribe(MQTT_TOPICS, (err) => {
+  mqttClient.subscribe([...MQTT_TOPICS, FP_RESULT_TOPIC, FP_SLOTS_TOPIC], (err) => {
     if (err) console.error('[mqtt] subscribe error:', err.message);
   });
 });
@@ -49,6 +56,17 @@ mqttClient.on('connect', () => {
 mqttClient.on('message', (topic, message) => {
   const value = message.toString();
   console.log(`[mqtt] ${topic}: ${value}`);
+
+  if (topic === FP_RESULT_TOPIC) {
+    lastFpResult = { value, ts: new Date().toISOString() };
+    return;
+  }
+  if (topic === FP_SLOTS_TOPIC) {
+    sensorSlots = value ? value.split(',').map(Number) : [];
+    console.log(`[mqtt] sensor slots: [${sensorSlots}]`);
+    return;
+  }
+
   db.events.push({ topic, value, ts: new Date().toISOString() });
   if (db.events.length > MAX_EVENTS) db.events.splice(0, db.events.length - MAX_EVENTS);
   saveData(db);
@@ -109,13 +127,36 @@ app.post('/templates', (req, res) => {
   res.status(201).json({ id, ...db.templates[id] });
 });
 
-// DELETE /templates/:id
+// DELETE /templates/:id  — also sends sensor delete command via MQTT
 app.delete('/templates/:id', (req, res) => {
   const key = req.params.id;
   if (!db.templates[key]) return res.status(404).json({ error: 'Not found' });
   delete db.templates[key];
   saveData(db);
+  mqttClient.publish(FP_CMD_TOPIC, `DELETE:${key}`);
   res.json({ deleted: parseInt(key, 10) });
+});
+
+// POST /fingerprint/enroll  — trigger sensor enrollment, returns 202 immediately
+// Body: { id: <number> }   Poll GET /fingerprint/result for outcome.
+app.post('/fingerprint/enroll', (req, res) => {
+  const { id } = req.body;
+  if (typeof id !== 'number' || !Number.isInteger(id) || id < 0) {
+    return res.status(400).json({ error: '"id" must be a non-negative integer' });
+  }
+  lastFpResult = null;  // clear stale result
+  mqttClient.publish(FP_CMD_TOPIC, `ENROLL:${id}`);
+  res.status(202).json({ status: 'enrolling', id });
+});
+
+// GET /fingerprint/result  — latest result from sensor (poll after enroll)
+app.get('/fingerprint/result', (req, res) => {
+  res.json(lastFpResult || { value: null, ts: null });
+});
+
+// GET /fingerprint/slots  — slot IDs currently enrolled on the physical sensor
+app.get('/fingerprint/slots', (req, res) => {
+  res.json({ slots: sensorSlots });
 });
 
 // 404 catch-all
@@ -142,7 +183,9 @@ app.get('/', (req, res) => {
   .CLOSED{color:#2196f3}
   .OFF{color:#555}
   .UNKNOWN{color:#ff9800}
-  .DOWN{color:#f44336}
+  .DOWN,.DENIED,.ENROLL_MISMATCH,.ENROLL_TIMEOUT,.ENROLL_FAIL,.SENSOR_UNAVAILABLE{color:#f44336}
+  .GRANTED,.ok-state{color:#4caf50}
+  .enrolling-state{color:#ff9800}
   section{background:#1e1e1e;border-radius:10px;padding:1rem;margin-bottom:1.2rem}
   table{width:100%;border-collapse:collapse;font-size:.85rem}
   th{text-align:left;color:#888;font-weight:400;padding:.3rem .5rem;border-bottom:1px solid #333}
@@ -166,20 +209,23 @@ app.get('/', (req, res) => {
   <div class="card"><div class="label">Door</div><div class="value" id="s-door">…</div></div>
   <div class="card"><div class="label">PIR Motion</div><div class="value" id="s-pir">…</div></div>
   <div class="card"><div class="label">Radar</div><div class="value" id="s-radar">…</div></div>
+  <div class="card"><div class="label">Fingerprint</div><div class="value" id="s-fp" style="font-size:1rem">…</div></div>
 </div>
 
 <section>
   <h2>Fingerprint Templates</h2>
   <table>
-    <thead><tr><th>Slot</th><th>Name</th><th>Note</th><th>Updated</th><th></th></tr></thead>
-    <tbody id="tpl-body"><tr><td colspan="5" style="color:#555">Loading…</td></tr></tbody>
+    <thead><tr><th>Slot</th><th>Name</th><th>Note</th><th>On Sensor</th><th>Updated</th><th></th></tr></thead>
+    <tbody id="tpl-body"><tr><td colspan="6" style="color:#555">Loading…</td></tr></tbody>
   </table>
-  <div class="form-row">
+  <div class="form-row" style="margin-top:1rem;flex-wrap:wrap;gap:.5rem">
     <input id="tpl-id"   type="number" placeholder="Slot #" style="width:80px">
     <input id="tpl-name" type="text"   placeholder="Name">
     <input id="tpl-note" type="text"   placeholder="Note (optional)">
-    <button onclick="addTemplate()">Add / Update</button>
+    <button onclick="saveMetaOnly()">Save Name Only</button>
+    <button onclick="enrollOnSensor()" style="background:#e65100">Enroll on Sensor</button>
   </div>
+  <div id="enroll-status" style="margin-top:.6rem;font-size:.85rem;min-height:1.2em"></div>
 </section>
 
 <section>
@@ -208,6 +254,10 @@ async function refresh() {
     set('s-door',  s['garage/door/state']?.value);
     set('s-pir',   s['garage/pir']?.value);
     set('s-radar', s['garage/radar']?.value);
+    const fpVal = s['garage/fingerprint']?.value || '';
+    const fpEl = document.getElementById('s-fp');
+    fpEl.textContent = fpVal || '—';
+    fpEl.className = 'value ' + (fpVal.startsWith('GRANTED') ? 'ON' : fpVal === 'DENIED' ? 'DOWN' : fpVal === 'UNAVAILABLE' ? 'UNKNOWN' : '');
 
     // MQTT indicator — if we got any status data broker is reachable
     const connected = Object.keys(s).length > 0 || e.length > 0;
@@ -215,12 +265,15 @@ async function refresh() {
     document.getElementById('mtext').textContent = connected ? 'MQTT broker connected' : 'MQTT broker unreachable';
 
     // Templates
+    const [slotRes] = await Promise.all([fetch('/fingerprint/slots').then(r=>r.json())]);
+    const onSensor = new Set(slotRes.slots || []);
     const tb = document.getElementById('tpl-body');
     tb.innerHTML = t.length ? t.map(r =>
       '<tr><td>'+r.id+'</td><td>'+esc(r.name)+'</td><td>'+esc(r.note||'')+'</td>' +
+      '<td style="text-align:center">'+(onSensor.has(r.id)?'<span class="ON">✓</span>':'<span class="DOWN">✗</span>')+'</td>' +
       '<td class="ts">'+(r.updatedAt||'').replace('T',' ').slice(0,16)+'</td>' +
       '<td><button class="del" onclick="delTemplate('+r.id+')">✕</button></td></tr>'
-    ).join('') : '<tr><td colspan="5" style="color:#555">No templates registered</td></tr>';
+    ).join('') : '<tr><td colspan="6" style="color:#555">No templates registered</td></tr>';
 
     // Events
     const eb = document.getElementById('evt-body');
@@ -236,23 +289,80 @@ async function refresh() {
 
 function esc(s){ const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
 
-async function addTemplate() {
+function getFormValues() {
   const id   = parseInt(document.getElementById('tpl-id').value, 10);
   const name = document.getElementById('tpl-name').value.trim();
   const note = document.getElementById('tpl-note').value.trim();
-  if (isNaN(id) || !name) return alert('Slot # and Name are required');
-  await fetch('/templates', {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ id, name, ...(note && {note}) })
-  });
+  if (isNaN(id) || !name) { alert('Slot # and Name are required'); return null; }
+  return { id, name, note };
+}
+
+function clearForm() {
   document.getElementById('tpl-id').value = '';
   document.getElementById('tpl-name').value = '';
   document.getElementById('tpl-note').value = '';
+}
+
+async function saveMetaOnly() {
+  const v = getFormValues(); if (!v) return;
+  await fetch('/templates', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ id: v.id, name: v.name, ...(v.note && {note: v.note}) })
+  });
+  clearForm();
   refresh();
 }
 
+let enrollPollTimer = null;
+
+async function enrollOnSensor() {
+  const v = getFormValues(); if (!v) return;
+  // Save metadata first
+  await fetch('/templates', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ id: v.id, name: v.name, ...(v.note && {note: v.note}) })
+  });
+  // Trigger enrollment
+  const r = await fetch('/fingerprint/enroll', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ id: v.id })
+  });
+  if (!r.ok) { alert('Failed to send enroll command'); return; }
+  clearForm();
+  setEnrollStatus('enrolling-state', '⏳ Place finger on sensor… (30s timeout)');
+  if (enrollPollTimer) clearInterval(enrollPollTimer);
+  const started = Date.now();
+  enrollPollTimer = setInterval(async () => {
+    if (Date.now() - started > 35000) {
+      clearInterval(enrollPollTimer);
+      setEnrollStatus('DOWN', '⚠ No response from sensor');
+      return;
+    }
+    const res = await fetch('/fingerprint/result').then(r=>r.json());
+    if (!res.value) return;
+    clearInterval(enrollPollTimer);
+    if (res.value.startsWith('OK:')) {
+      setEnrollStatus('ok-state', '✓ Enrolled successfully (slot '+res.value.split(':')[1]+')');
+    } else if (res.value === 'ENROLL_MISMATCH') {
+      setEnrollStatus('DOWN', '✗ Mismatch — fingers didn\'t match. Try again.');
+    } else if (res.value === 'ENROLL_TIMEOUT') {
+      setEnrollStatus('DOWN', '✗ Timed out — no finger detected');
+    } else {
+      setEnrollStatus('DOWN', '✗ '+res.value);
+    }
+    refresh();
+  }, 1500);
+}
+
+function setEnrollStatus(cls, msg) {
+  const el = document.getElementById('enroll-status');
+  el.className = cls; el.textContent = msg;
+}
+
+async function addTemplate() { await saveMetaOnly(); }
+
 async function delTemplate(id) {
-  if (!confirm('Delete slot ' + id + '?')) return;
+  if (!confirm('Delete slot ' + id + ' from database AND sensor?')) return;
   await fetch('/templates/' + id, { method:'DELETE' });
   refresh();
 }
